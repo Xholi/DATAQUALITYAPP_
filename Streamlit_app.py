@@ -76,14 +76,13 @@ def send_email(to_email, subject, body, attachment_path):
     server.quit()
 
 # Streamlit App
-st.set_page_config(page_title="MASTER DATA QUALITY CONTROL DASHBOARD")
 st.sidebar.title("Navigation")
-page = st.sidebar.radio("Choose a page", ('Changes', 'Creations'))
+page = st.sidebar.radio("Go to", ['Changes', 'Creations'])
 
 if page == 'Changes':
-    st.title("MASTER DATA QUALITY CONTROL DASHBOARD - Changes")
+    st.title("Changes")
 else:
-    st.title("MASTER DATA QUALITY CONTROL DASHBOARD - Creations")
+    st.title("Creations")
 
 # Sidebar for file upload or SQL connection
 st.sidebar.title("Upload Data")
@@ -158,6 +157,8 @@ failed_data_points['Failed_Checks'] = failed_data_points.apply(
 
 failed_data_points = failed_data_points[failed_data_points['Failed_Checks'].map(len) > 0]
 
+valid_data_points = df[~df.index.isin(failed_data_points.index)]
+
 # Layout: Three main sections
 st.header("Statistics")
 
@@ -187,7 +188,7 @@ with col2:
     st.plotly_chart(fig_gauge_pod)
 
 st.markdown("<br>", unsafe_allow_html=True)  # Add space between gauges
-
+# st.markdown("<br>", unsafe_allow_html=True) 
 with col3:
     fig_gauge_completeness = go.Figure(go.Indicator(
         mode="gauge+number",
@@ -198,9 +199,24 @@ with col3:
     fig_gauge_completeness.update_layout(width=300, height=300)
     st.plotly_chart(fig_gauge_completeness)
 
-# Validation Results
+# Show validation results as tables
 st.header("Validation Results")
 
+# st.subheader("Passed Validation Checks")
+passed_df = pd.DataFrame({
+    "Validation Check": list(passed_percentage.keys()),
+    "Passed Percentage": list(passed_percentage.values())
+})
+# st.dataframe(passed_df)
+
+# st.subheader("Failed Validation Checks")
+failed_df = pd.DataFrame({
+    "Validation Check": list(failed_percentage.keys()),
+    "Failed Percentage": list(failed_percentage.values())
+})
+# st.dataframe(failed_df)
+
+# Bar Chart of Validation Results
 labels = list(passed_percentage.keys())
 passed = list(passed_percentage.values())
 failed = list(failed_percentage.values())
@@ -224,25 +240,30 @@ fig_validation.add_trace(go.Bar(
 fig_validation.update_layout(barmode='stack', title="Validation Results", xaxis_title="Percentage", yaxis_title="Validation Check")
 st.plotly_chart(fig_validation)
 
-# Data Preview
-st.header("Data Preview")
-st.dataframe(df.head())
+# Download failed data points as CSV
+st.header("Failed Data Points")
+st.dataframe(failed_data_points)
+csv = failed_data_points.to_csv(index=False)
+st.download_button(label="Download Failed Data Points as CSV", data=csv, file_name='failed_data_points.csv', mime='text/csv')
 
 # Email section
-st.header("Send Failed Data Points via Email")
-recipient_email = st.text_input("Recipient Email")
-email_subject = st.text_input("Email Subject", "Failed Data Points")
-email_body = st.text_area("Email Body", "Please find attached the failed data points.")
-failed_data_file = "failed_data_points.csv"
-failed_data_points.to_csv(failed_data_file, index=False)
+st.sidebar.title("Send Report via Email")
+to_email = st.sidebar.text_input("Recipient Email")
+email_subject = st.sidebar.text_input("Email Subject")
+email_body = st.sidebar.text_area("Email Body")
 
-if st.button("Send Email"):
-    send_email(recipient_email, email_subject, email_body, failed_data_file)
-    st.success(f"Email sent to {recipient_email} with attachment {failed_data_file}.")
-
-# Footer
-st.markdown("""
-<footer>
-    <p>Developed by <a href="mailto:MantshXS@eskom.co.za">MantshXS@eskom.co.za</a></p>
-</footer>
-""", unsafe_allow_html=True)
+if st.sidebar.button("Send Email"):
+    if not to_email or not email_subject or not email_body:
+        st.sidebar.warning("Please fill in all the email fields.")
+    else:
+        try:
+            # Save the CSV to a temporary file
+            temp_csv_path = "/tmp/failed_data_points.csv"
+            with open(temp_csv_path, 'w') as f:
+                f.write(csv)
+            
+            send_email(to_email, email_subject, email_body, temp_csv_path)
+            st.sidebar.success("Email sent successfully!")
+        except Exception as e:
+            st.sidebar.error(f"Error sending email: {e}")
+#
